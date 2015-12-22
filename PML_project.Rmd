@@ -1,0 +1,120 @@
+---
+output: html_document
+---
+
+# Predicting barbell lifts activity 
+
+```{r}
+library(ggplot2)
+library(caret)
+library(randomForest)
+```
+
+## Introduction
+
+Using devices such as *Jawbone Up*, *Nike FuelBand*, and *Fitbit* it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In the project described in this paper, data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants is used. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. The goal of the current project is to predict the manner in which they did the exercise. This is the "classe" variable in the training set. 
+
+## Data preparation
+Data that can be used for training purposes is available and also data without the "classe" variable. More information on the data used is available from the website here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset). 
+
+After an initial download, dim(train_data_org) tells us that there are 19622 instances (rows) and 160 variables (colums) in the train data set. Summary(train_data_org) and especially str(train_data_org) shows us that the train data set contain 'contaminations' e.g. #DIV/0 values, empty cells and many variables holding only NA 'values' (since there are so many variables the results of the summary and str functions are not shown here). 
+
+We first convert the #DIV/0 values and empty cells to NA 'values'. Since, there are so many variables we chose this option instead of trying to impute values (if the model isn't accurate enough we can always come back and enhance the data preparation with e.g. imputing values). Later we on we will clean up the data further using the appropiate NA functions. For now:
+
+```{r}
+train_data_org <-read.csv('https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv', na.strings=c('#DIV/0', '', 'NA') ,stringsAsFactors = F)
+unknown_data_org <-read.csv('https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv', na.strings=c('#DIV/0', '', 'NA') ,stringsAsFactors = F)
+```
+
+```{r}
+head(names(train_data_org))
+```
+
+A close inspection of the data shows us that the first six variables are only descriptions (e.g. an id) and timestamps. So, we get rid of these variables that don't have predictive power.
+
+```{r}
+train_data_org <- train_data_org[, 7:160]
+unknown_data_org <- unknown_data_org[, 7:160]
+```
+
+Now, we only keep columns in which there are no NA 'values'. Those are the columns of which the total count of NA values is 0. 
+
+```{r}
+train_data<-train_data_org[,colSums(is.na(train_data_org)) == 0]
+unknown_data<-unknown_data_org[,colSums(is.na(train_data_org)) == 0]
+```
+
+Just to check that all NA are removed now:
+
+```{r}
+sum(is.na(train_data))
+sum(is.na(unknown_data))
+```
+
+Finally, we partition the data so that we can first train our model and validate it afterwards.
+
+```{r}
+train_subset <- createDataPartition(y=train_data$classe,p=0.6,list=FALSE)
+train_data_final <- train_data[train_subset,]
+test_data_final <- train_data[-train_subset,]
+```
+
+## Training the model using cross validation
+
+We now have the data sets prepared for training and prediction using a proper Machine Learning algorithm. For our classification problem we start with the Random Forest algorithm and see how well it predicts. For training furposes we use **cross validation**. Initially using 5 folds.
+
+```{r}
+modFit <-train(classe~.,data=train_data_final,method="rf", trControl=trainControl(method="cv",number=5), prox=TRUE,allowParallel=FALSE)
+modFit
+```
+
+Using these settings we see that the model built by using the train data set already provides a train Accuracy of >99%. For all 5 folds the accuracy was high but it performed best for the model using 27 predictor variables.   
+
+## Testing the model
+
+Now we use the model that was built on our test data set.
+
+```{r}
+pred <- predict(modFit, test_data_final)
+result <- confusionMatrix(test_data_final$classe, pred)
+result
+```
+
+Since the Accuracy again is >99%, the model was well built (no overfitting for instance) and the confusion matrix shows us the small number of miss classifications. To quantify the **expected out of sample error** when predicting on *an independent sample*, we use 1 - accuracy which is less than 1%.
+
+```{r}
+test_data_final$predRight <- pred==test_data_final$classe
+```
+
+To visualize the classification accuracy, using the model on the test data set we create the following plot for the first two variables in the data set.
+
+```{r, fig.width=6, fig.height=6}
+qplot(roll_belt, pitch_belt, colour=predRight, size=I(3), data=test_data_final, main="Corretly classified an misclassified instances")
+```
+
+*Figure 1. Correctly classified (True) an misclassified (False)instances using the model*
+
+## Using the model to predict unknown classe
+
+Now we have a valid model we can use it to predict classe in the data of which the classe is not known. For these 20 different test cases the classe predicted is
+
+```{r}
+pred <- predict(modFit, unknown_data)
+pred
+```
+
+## Conclusion
+
+We used Random Forest as our machine learning algorithm to predict the (barbell lifts activity) classe. With 5 fold cross validation on the training set a model was built. The classification accuracy for this model was >99%. The expected accuracy on the test data set was >99%, and hence the expected out of sample error <1%. Using the model on the test data set proved this to be true.  
+
+
+
+
+
+
+
+
+
+
+
+
